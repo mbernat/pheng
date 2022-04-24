@@ -2,11 +2,16 @@ use macroquad::prelude::*;
 
 struct Body {
     mass: f32,
+    inertia: f32,
     shape: FiniteShape,
 
     pos: Vec2,
     vel: Vec2,
     force: Vec2,
+
+    angle: f32,
+    omega: f32,
+    torque: f32,
 }
 
 struct Penetration {
@@ -58,13 +63,17 @@ fn circle_line_collision(c: &Circle, l: &Line) -> CollisionResult {
 }
 
 impl Body {
-    fn new(mass: f32, shape: FiniteShape, pos: Vec2) -> Body {
+    fn new(mass: f32, inertia: f32, shape: FiniteShape, pos: Vec2, angle: f32) -> Body {
         Body {
             mass,
+            inertia,
             shape,
             pos,
             vel: Vec2::ZERO,
             force: Vec2::ZERO,
+            angle,
+            omega: 0.,
+            torque: 0.,
         }
     }
 
@@ -72,8 +81,12 @@ impl Body {
         let acc = self.force / self.mass;
         self.vel += acc * dt;
         self.pos += self.vel * dt;
-
         self.force = Vec2::ZERO;
+
+        let alpha = self.torque / self.inertia;
+        self.omega += alpha * dt;
+        self.angle += self.omega * dt;
+        self.torque = 0.;
     }
 
     fn collide(&mut self, geom: &Geometry) {
@@ -102,9 +115,19 @@ impl Body {
         match self.shape {
             FiniteShape::Circle(Circle { r, .. }) => {
                 draw_circle_lines(self.pos.x, self.pos.y, r, 1.0, WHITE);
+
+                let rot = Mat2::from_angle(self.angle);
+                let xdelta = r * rot * Vec2::X;
+                let ydelta = r * rot * Vec2::Y;
+                draw_line_vec(self.pos + xdelta, self.pos - xdelta);
+                draw_line_vec(self.pos + ydelta, self.pos - ydelta);
             }
         }
     }
+}
+
+fn draw_line_vec(a: Vec2, b: Vec2) {
+    draw_line(a.x, a.y, b.x, b.y, 1.0, WHITE);
 }
 
 // ax + by + c == 0
@@ -230,7 +253,7 @@ async fn main() {
         pos: Vec2::ZERO,
         r: 20.,
     };
-    let body = Body::new(1., FiniteShape::Circle(circ), pos);
+    let body = Body::new(1., 1000., FiniteShape::Circle(circ), pos, 1.);
     let line = Line {
         a: 0.,
         b: -1.,
@@ -253,7 +276,6 @@ async fn main() {
         bodies: vec![body],
     };
 
-    println!("Hello, world!");
     loop {
         state.draw();
 
